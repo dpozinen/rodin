@@ -1,0 +1,22 @@
+spring:
+  application.name: rodin
+#  data:
+#    redis:
+#      host: ${embedded.redis.host}
+#      port: ${embedded.redis.port}
+#      password: ${embedded.redis.password}
+
+rodin:
+  telegram:
+    host: "https://api.telegram.org"
+    bot-segment: 'bot'
+  get-updates:
+    cron: '*/5 * * * * *'
+  send-messages:
+    cron: '0 0 8 * * *'
+
+server:
+  port: 8080
+management:
+  server:
+    port: 8081
