@@ -14,13 +14,9 @@ RUN apt -y install openjdk-21-jre
 
 WORKDIR /opt/app/
 
-COPY --from=build "/usr/app//build/distributions/rodin-$PROJECT_VERSION.tar" .
-
-RUN tar -xvf rodin-$PROJECT_VERSION.tar
-
-WORKDIR /opt/app/rodin-$PROJECT_VERSION/bin
+COPY --from=build "/usr/app/build/libs/rodin-$PROJECT_VERSION.jar" .
 
 EXPOSE 8080
 EXPOSE 8081
 
-ENTRYPOINT ["./rodin"]
+ENTRYPOINT ["/usr/bin/java -jar rodin-$PROJECT_VERSION.jar"]
