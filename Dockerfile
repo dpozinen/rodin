@@ -10,13 +10,13 @@ LABEL authors="dpozinen"
 ARG PROJECT_VERSION
 
 RUN apt -y update
-RUN apt -y install openjdk-21-jre
+RUN apt -y install openjdk-21-jdk
 
 WORKDIR /opt/app/
 
-COPY --from=build "/usr/app/build/libs/rodin-$PROJECT_VERSION.jar" .
+COPY --from=build "/usr/app/build/libs/rodin-$PROJECT_VERSION.jar" "rodin.jar"
 
 EXPOSE 8080
 EXPOSE 8081
 
-ENTRYPOINT ["/usr/bin/java -jar rodin-$PROJECT_VERSION.jar"]
+CMD ["/usr/bin/java", "-jar", "/opt/app/rodin.jar"]
