@@ -26,6 +26,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Test
+        run: ./gradlew test
+
       - name: Save Project Version
         run: echo "PROJECT_VERSION=$(./gradlew -q printProjectVersion)" >> $GITHUB_ENV
 
