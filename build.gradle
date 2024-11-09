@@ -34,6 +34,16 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis:3.3.5'
 	implementation 'io.lettuce:lettuce-core:6.4.0.RELEASE'
 
+	configurations.configureEach {
+		resolutionStrategy {
+			eachDependency { details ->
+				if (details.requested.group == 'io.netty') {
+					details.useVersion '4.1.114.Final' // Replace with the desired version
+				}
+			}
+		}
+	}
+
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'io.projectreactor:reactor-test'
 	testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
