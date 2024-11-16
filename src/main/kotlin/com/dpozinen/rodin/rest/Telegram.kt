@@ -2,13 +2,14 @@ package com.dpozinen.rodin.rest
 
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
+import org.springframework.http.HttpHeaders.CONTENT_TYPE
+import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
 import org.springframework.stereotype.Service
-import org.springframework.web.reactive.function.BodyInserters
 import org.springframework.web.reactive.function.BodyInserters.fromValue
 import org.springframework.web.reactive.function.client.WebClient
+import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.reactive.function.client.awaitBody
+import reactor.core.publisher.Mono
 
 @Service
 class Telegram(private val webclient: WebClient) {
@@ -31,23 +32,37 @@ class Telegram(private val webclient: WebClient) {
         text: String,
         markdown: Boolean = false,
         hidePreview: Boolean = true,
-    ) = runCatching {
-        webclient.post().uri("/sendMessage")
-            .body(fromValue(
-                """
-                    {
-                        "chat_id": "$chatId",
-                        "text": "$text",
-                        "link_preview_options": {
-                            "is_disabled": $hidePreview
-                        },
-                        ${markdown.takeIf { it }?.let { "\"parse_mode\": \"MarkdownV2\"" } ?: ""}
-                    }
-                """.trimIndent()
-            ))
-            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-            .retrieve()
-            .awaitBody<SendMessageResponse>()
-    }.onFailure { log.warn("Failed to send message: $text", it) }
+    ) {
+        runCatching {
+            webclient.post().uri("/sendMessage")
+                .body(requestBody(chatId, text, hidePreview, markdown))
+                .header(CONTENT_TYPE, APPLICATION_JSON_VALUE)
+                .retrieve()
+                .bodyToMono(String::class.java)
+                .onErrorResume(WebClientResponseException::class.java) { ex ->
+                    Mono.just(ex.responseBodyAsString)
+                        .doOnNext { log.error("Error response from Telegram for message '$text': $it") }
+                }
+                .subscribe()
+        }.onFailure {
+            log.error("Failed to send message: $it")
+        }
+    }
+
+    private fun requestBody(
+        chatId: String,
+        text: String,
+        hidePreview: Boolean,
+        markdown: Boolean
+    ) = fromValue(
+        """{
+                "chat_id": "$chatId",
+                "text": "$text",
+                "link_preview_options": {
+                    "is_disabled": $hidePreview
+                }
+                ${if (markdown) ",\"parse_mode\": \"MarkdownV2\"" else ""}
+            }""".trimIndent()
+    )
 
 }

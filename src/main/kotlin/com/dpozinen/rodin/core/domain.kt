@@ -8,7 +8,7 @@ private const val gpt = "Breakdown, Translate, Usages of: "
 
 data class Word(val french: String, val english: String) {
 
-    var escaped = "_*[]()~`>#+=|{}.!"
+    var escaped = "_*[]()-~`>#+=|{}.!"
 
     fun asMessage() = "${escapeMd(french)} \\\\| ||${escapeMd(english)}||" +
             " [ChatGPT](https://chatgpt.com/?q=${gptQuery(french)})\n"

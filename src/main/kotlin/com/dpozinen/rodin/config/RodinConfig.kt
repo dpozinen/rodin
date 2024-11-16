@@ -3,7 +3,12 @@ package com.dpozinen.rodin.config
 import com.dpozinen.rodin.domain.Chat
 import com.dpozinen.rodin.domain.Offset
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import io.lettuce.core.resource.DefaultClientResources.DEFAULT_ADDRESS_RESOLVER_GROUP
+import io.netty.resolver.dns.DnsAddressResolverGroup
+import io.netty.resolver.dns.DnsNameResolverBuilder
+import io.netty.resolver.dns.DnsNameResolverChannelStrategy.ChannelPerResolution
 import org.springframework.beans.factory.annotation.Value
+import org.springframework.boot.autoconfigure.data.redis.ClientResourcesBuilderCustomizer
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory
@@ -12,17 +17,37 @@ import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer
 import org.springframework.data.redis.serializer.RedisSerializationContext
 import org.springframework.data.redis.serializer.StringRedisSerializer
 import org.springframework.web.reactive.function.client.WebClient
+import kotlin.reflect.full.memberProperties
+import kotlin.reflect.jvm.isAccessible
 
 
 @Configuration
 class RodinConfig {
 
     @Bean
+    fun clientResourcesCustomizer() = ClientResourcesBuilderCustomizer { builder ->
+        builder.addressResolverGroup(
+            DEFAULT_ADDRESS_RESOLVER_GROUP.also { group ->
+                if (group is DnsAddressResolverGroup)
+                    group::class
+                        .memberProperties
+                        .first { it.returnType.classifier == DnsNameResolverBuilder::class }
+                        .also { field ->
+                            field.isAccessible = true
+                            field.getter.call(group).also { dns ->
+                                (dns as DnsNameResolverBuilder).datagramChannelStrategy(ChannelPerResolution)
+                            }
+                        }
+                else throw IllegalStateException("DEFAULT_ADDRESS_RESOLVER_GROUP is not DnsAddressResolverGroup")
+            }
+        )
+    }
+
+    @Bean
     fun webClient(
         @Value("\${rodin.telegram.host}") host: String,
         @Value("\${rodin.telegram.bot-segment}") botSegment: String,
     ) = WebClient.create("$host/$botSegment")
-
 
     @Bean
     fun redisChatConfigTemplate(factory: ReactiveRedisConnectionFactory): ReactiveRedisTemplate<String, Chat> {
@@ -40,7 +65,6 @@ class RodinConfig {
         return ReactiveRedisTemplate(factory, context)
     }
 
-
     @Bean
     fun redisOffsetTemplate(factory: ReactiveRedisConnectionFactory): ReactiveRedisTemplate<String, Offset> {
         val keySerializer = StringRedisSerializer()
@@ -56,6 +80,5 @@ class RodinConfig {
 
         return ReactiveRedisTemplate(factory, context)
     }
-
 
 }
