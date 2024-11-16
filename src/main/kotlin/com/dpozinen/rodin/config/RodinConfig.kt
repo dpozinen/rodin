@@ -4,9 +4,12 @@ import com.dpozinen.rodin.domain.Chat
 import com.dpozinen.rodin.domain.Offset
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import io.lettuce.core.resource.DefaultClientResources.DEFAULT_ADDRESS_RESOLVER_GROUP
+import io.netty.resolver.DefaultAddressResolverGroup
 import io.netty.resolver.dns.DnsAddressResolverGroup
 import io.netty.resolver.dns.DnsNameResolverBuilder
 import io.netty.resolver.dns.DnsNameResolverChannelStrategy.ChannelPerResolution
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.data.redis.ClientResourcesBuilderCustomizer
 import org.springframework.context.annotation.Bean
@@ -26,21 +29,7 @@ class RodinConfig {
 
     @Bean
     fun clientResourcesCustomizer() = ClientResourcesBuilderCustomizer { builder ->
-        builder.addressResolverGroup(
-            DEFAULT_ADDRESS_RESOLVER_GROUP.also { group ->
-                if (group is DnsAddressResolverGroup)
-                    group::class
-                        .memberProperties
-                        .first { it.returnType.classifier == DnsNameResolverBuilder::class }
-                        .also { field ->
-                            field.isAccessible = true
-                            field.getter.call(group).also { dns ->
-                                (dns as DnsNameResolverBuilder).datagramChannelStrategy(ChannelPerResolution)
-                            }
-                        }
-                else throw IllegalStateException("DEFAULT_ADDRESS_RESOLVER_GROUP is not DnsAddressResolverGroup")
-            }
-        )
+        builder.addressResolverGroup(DefaultAddressResolverGroup.INSTANCE)
     }
 
     @Bean
