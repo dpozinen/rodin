@@ -10,11 +10,14 @@ import com.dpozinen.rodin.rest.GetUpdatesResponse
 import com.dpozinen.rodin.rest.Telegram
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import jakarta.annotation.PostConstruct
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.reactor.awaitSingle
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.runBlocking
+import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.ReactiveRedisOperations
 import org.springframework.data.redis.core.scanAsFlow
 import org.springframework.data.redis.core.setAndAwait
@@ -29,6 +32,7 @@ class AugusteRodin(
     private val offsetTemplate: ReactiveRedisOperations<String, Offset>,
     private val telegram: Telegram,
 ) {
+    private val log = LoggerFactory.getLogger(this::class.java)
 
     private val words: Words = jacksonObjectMapper()
         .readValue({}.javaClass.getResource("/words.json"), Words::class.java)
@@ -43,7 +47,10 @@ class AugusteRodin(
 
     @Scheduled(cron = "\${rodin.send-messages.cron}")
     fun sendMessages() {
-        chatTemplate.scanAsFlow().map { chatOps.chat(it) }.onEach { sendNext(it) }
+        runBlocking {
+            log.info("Sending messages")
+            chatTemplate.scanAsFlow().map { chatOps.chat(it) }.onEach { sendNext(it) }.collect()
+        }
     }
 
     private suspend fun sendNext(chat: Chat) {
