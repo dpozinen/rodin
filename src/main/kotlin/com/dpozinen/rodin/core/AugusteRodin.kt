@@ -2,15 +2,13 @@ package com.dpozinen.rodin.core
 
 import com.dpozinen.rodin.domain.Chat
 import com.dpozinen.rodin.domain.ChatCommand
-import com.dpozinen.rodin.domain.ChatCommand.MORE
-import com.dpozinen.rodin.domain.ChatCommand.OTHER
-import com.dpozinen.rodin.domain.ChatCommand.SET_CURSOR
+import com.dpozinen.rodin.domain.ChatCommand.*
+import com.dpozinen.rodin.domain.ChatLanguage
 import com.dpozinen.rodin.domain.Offset
 import com.dpozinen.rodin.rest.GetUpdatesResponse
 import com.dpozinen.rodin.rest.Telegram
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import jakarta.annotation.PostConstruct
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
@@ -34,8 +32,12 @@ class AugusteRodin(
 ) {
     private val log = LoggerFactory.getLogger(this::class.java)
 
-    private val words: Words = jacksonObjectMapper()
-        .readValue({}.javaClass.getResource("/words.json"), Words::class.java)
+    private val words: Map<ChatLanguage, Words> = mapOf(
+        ChatLanguage.FR to jacksonObjectMapper()
+            .readValue({}.javaClass.getResource("/fr-words.json"), Words::class.java),
+        ChatLanguage.ES to jacksonObjectMapper()
+            .readValue({}.javaClass.getResource("/es-words.json"), Words::class.java)
+    )
 
     @PostConstruct
     fun initOffset() {
@@ -55,24 +57,25 @@ class AugusteRodin(
 
     private suspend fun sendNext(chat: Chat) {
         var addRepeatedMessaged = false
+        val cursor = chat.cursors[chat.currentLanguage]!!
 
-        if (chat.cursor >= words.count - chat.wordCount - 1) {
+        if (cursor.cursor >= words[chat.currentLanguage]!!.count - cursor.wordCount - 1) {
             chatTemplate.opsForValue()
-                .set(chat.id, chat.also { it.cursor = 0 })
+                .set(chat.id, chat.also { it.cursors[it.currentLanguage]!!.cursor = 0 })
                 .awaitSingle()
 
             addRepeatedMessaged = true
         }
 
-        val newCursor = chat.cursor + chat.wordCount
-        val batch = words.words.subList(chat.cursor, newCursor)
+        val newCursor = cursor.cursor + cursor.wordCount
+        val batch = words[chat.currentLanguage]!!.words.subList(cursor.cursor, newCursor)
 
         if (addRepeatedMessaged) telegram.sendMessage(chat.id, "⚠\uFE0F Word cycle complete")
 
         batch.forEach { word -> telegram.sendMessage(chat.id, word.asMessage(), markdown = true) }
 
         chatTemplate.opsForValue()
-            .set(chat.id, chat.also { it.cursor = newCursor })
+            .set(chat.id, chat.also { it.cursors[it.currentLanguage]!!.cursor = newCursor })
             .awaitSingle()
 
         telegram.sendMessage(chat.id, "||cursor at ${newCursor}||\n", markdown = true)
@@ -102,6 +105,7 @@ class AugusteRodin(
     private suspend fun handleChatUpdates(updates: List<GetUpdatesResponse.Result>, chatId: String) {
         val chat = chatOps.maybeCreate(chatId)
         var command = chat.command
+        val cursor = chat.cursors[chat.currentLanguage]!!
 
         updates.forEach { update ->
             val text = update.message.text
@@ -113,7 +117,11 @@ class AugusteRodin(
                     MORE -> sendNext(chat)
                     OTHER -> telegram.sendMessage(chatId, "$text is not a command")
                     SET_CURSOR -> {
-                        telegram.sendMessage(chatId, "Now send the desired cursor. Current is ${chat.cursor}")
+                        telegram.sendMessage(chatId, "Now send the desired cursor. Current is ${cursor.cursor}")
+                        chatOps.set(chat)
+                    }
+                    LANG -> {
+                        telegram.sendMessage(chatId, "Now send the desired language. Current is ${chat.currentLanguage}")
                         chatOps.set(chat)
                     }
 
@@ -125,6 +133,10 @@ class AugusteRodin(
                         trySetCursor(text, chatId)
                         telegram.sendMessage(chatId, "Cursor is now at $text")
                     }
+                    LANG -> {
+                        trySetLanguage(text, chatId)
+                        telegram.sendMessage(chatId, "Language is now $text")
+                    }
 
                     else -> {}
                 }
@@ -134,9 +146,18 @@ class AugusteRodin(
 
     private suspend fun trySetCursor(text: String, chatId: String) {
         runCatching {
-            text.trim().toInt().let { cursor -> chatOps.set(chatId) { it.cursor = cursor } }
+            text.trim().toInt().let { cursor -> chatOps.set(chatId) { it.cursors[it.currentLanguage]!!.cursor = cursor } }
         }.onFailure {
             telegram.sendMessage(chatId, "$text is not a valid cursor value, did not update cursor")
+        }
+    }
+
+    private suspend fun trySetLanguage(text: String, chatId: String) {
+        runCatching {
+            ChatLanguage.valueOf(text.trim().uppercase())
+                .let { cursor -> chatOps.set(chatId) { it.currentLanguage = cursor } }
+        }.onFailure {
+            telegram.sendMessage(chatId, "$text is not a valid language value. Possible values: ${ChatLanguage.entries.toTypedArray()}")
         }
     }
 

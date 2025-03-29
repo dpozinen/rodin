@@ -1,7 +1,6 @@
 package com.dpozinen.rodin.core
 
 import com.dpozinen.rodin.domain.Chat
-import com.dpozinen.rodin.domain.ChatCommand.NONE
 import kotlinx.coroutines.reactor.awaitSingle
 import org.springframework.data.redis.core.ReactiveRedisOperations
 import org.springframework.data.redis.core.hasKeyAndAwait
@@ -19,7 +18,7 @@ class ChatOps(
         return if (chatTemplate.hasKeyAndAwait(chatId)) {
             chatTemplate.opsForValue().get(chatId).awaitSingle()
         } else {
-            chatTemplate.opsForValue().set(chatId, Chat(chatId, 0, 5, NONE)).awaitSingle()
+            chatTemplate.opsForValue().set(chatId, Chat(chatId)).awaitSingle()
             chatTemplate.opsForValue().get(chatId).awaitSingle()
         }
     }
