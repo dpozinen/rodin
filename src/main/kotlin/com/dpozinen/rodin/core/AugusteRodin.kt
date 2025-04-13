@@ -112,15 +112,8 @@ class AugusteRodin(
                 }
             } else {
                 when (command) {
-                    SET_CURSOR -> {
-                        trySetCursor(text, chatId)
-                        telegram.sendMessage(chatId, "com.dpozinen.rodin.domain.Cursor is now at $text")
-                    }
-                    LANG -> {
-                        trySetLanguage(text, chatId)
-                        telegram.sendMessage(chatId, "Language is now $text")
-                    }
-
+                    SET_CURSOR -> trySetCursor(text, chatId)
+                    LANG -> trySetLanguage(text, chatId)
                     else -> {}
                 }
             }
@@ -132,6 +125,7 @@ class AugusteRodin(
             text.trim().toInt().let { cursor -> chatOps.set(chatId) {
                 it.currentCursor().cursor = cursor
             } }
+            telegram.sendMessage(chatId, "Cursor is now at $text")
         }.onFailure {
             telegram.sendMessage(chatId, "$text is not a valid cursor value, did not update cursor")
         }
@@ -141,8 +135,9 @@ class AugusteRodin(
         runCatching {
             ChatLanguage.valueOf(text.trim().uppercase())
                 .let { language -> chatOps.set(chatId) { it.currentLanguage = language } }
+            telegram.sendMessage(chatId, "Language is now $text")
         }.onFailure {
-            telegram.sendMessage(chatId, "$text is not a valid language value. Possible values: ${ChatLanguage.entries.toTypedArray()}")
+            telegram.sendMessage(chatId, "$text is not a valid language value. Possible values: ${enumValues<ChatLanguage>()}")
         }
     }
 
