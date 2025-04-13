@@ -35,6 +35,16 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis:3.4.4'
 	implementation 'redis.clients:jedis:5.2.0'
 
+	configurations.configureEach {
+		resolutionStrategy {
+			eachDependency { dependency ->
+				if (dependency.requested.group == 'io.netty') {
+					dependency.useVersion '4.1.114.Final'
+				}
+			}
+		}
+	}
+
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'io.projectreactor:reactor-test'
 	testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
