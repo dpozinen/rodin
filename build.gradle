@@ -39,7 +39,7 @@ dependencies {
 		resolutionStrategy {
 			eachDependency { dependency ->
 				if (dependency.requested.group == 'io.netty') {
-					dependency.useVersion '4.1.114.Final'
+					dependency.useVersion '4.2.0.Final'
 				}
 			}
 		}
