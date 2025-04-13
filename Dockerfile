@@ -4,7 +4,7 @@ WORKDIR /usr/app/
 COPY . .
 RUN gradle build -x test
 
-FROM ubuntu:latest
+FROM ubuntu:20.04
 LABEL authors="dpozinen"
 
 ARG PROJECT_VERSION
