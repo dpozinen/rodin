@@ -9,16 +9,10 @@ import com.dpozinen.rodin.rest.GetUpdatesResponse
 import com.dpozinen.rodin.rest.Telegram
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import jakarta.annotation.PostConstruct
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.reactor.awaitSingle
-import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
-import org.springframework.data.redis.core.ReactiveRedisOperations
-import org.springframework.data.redis.core.scanAsFlow
-import org.springframework.data.redis.core.setAndAwait
+import org.springframework.data.redis.core.RedisOperations
+import org.springframework.data.redis.core.ScanOptions
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 
@@ -26,8 +20,8 @@ import org.springframework.stereotype.Service
 @Service
 class AugusteRodin(
     private val chatOps: ChatOps,
-    private val chatTemplate: ReactiveRedisOperations<String, Chat>,
-    private val offsetTemplate: ReactiveRedisOperations<String, Offset>,
+    private val chatTemplate: RedisOperations<String, Chat>,
+    private val offsetTemplate: RedisOperations<String, Offset>,
     private val telegram: Telegram,
 ) {
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -42,16 +36,18 @@ class AugusteRodin(
     @PostConstruct
     fun initOffset() {
         runBlocking {
-            offsetTemplate.opsForValue().get(Offset.ID).awaitSingleOrNull()
-                ?: offsetTemplate.opsForValue().setAndAwait(Offset.ID, Offset())
+            offsetTemplate.opsForValue().get(Offset.ID)
+                ?: offsetTemplate.opsForValue().set(Offset.ID, Offset())
         }
     }
 
     @Scheduled(cron = "\${rodin.send-messages.cron}")
     fun sendMessages() {
-        runBlocking {
-            log.info("Sending messages")
-            chatTemplate.scanAsFlow().map { chatOps.chat(it) }.onEach { sendNext(it) }.collect()
+        log.info("Sending messages")
+        chatTemplate.scan(ScanOptions.NONE).forEachRemaining {
+            runBlocking {
+                sendNext(chatOps.chat(it))
+            }
         }
     }
 
@@ -62,7 +58,6 @@ class AugusteRodin(
         if (cursor.cursor >= words[chat.currentLanguage]!!.count - cursor.wordCount - 1) {
             chatTemplate.opsForValue()
                 .set(chat.id, chat.also { it.cursors[it.currentLanguage]!!.cursor = 0 })
-                .awaitSingle()
 
             addRepeatedMessaged = true
         }
@@ -76,7 +71,6 @@ class AugusteRodin(
 
         chatTemplate.opsForValue()
             .set(chat.id, chat.also { it.cursors[it.currentLanguage]!!.cursor = newCursor })
-            .awaitSingle()
 
         telegram.sendMessage(chat.id, "||cursor at ${newCursor}||\n", markdown = true)
     }
@@ -85,8 +79,7 @@ class AugusteRodin(
     fun getUpdates() {
         runBlocking {
             offsetTemplate.opsForValue().get(Offset.ID)
-                .awaitSingle()
-                .offset
+                ?.offset
                 .let { offset ->
                     telegram.getUpdates(offset)
                         .result
@@ -94,7 +87,6 @@ class AugusteRodin(
                         ?.also {
                             offsetTemplate.opsForValue()
                                 .set(Offset.ID, Offset(offset = it.last().updateId + 1))
-                                .awaitSingle()
                         }
                         ?.groupBy { it.message.chat.id.toString() }
                         ?.forEach { (chatId, updates) -> handleChatUpdates(updates, chatId) }

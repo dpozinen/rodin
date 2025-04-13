@@ -1,38 +1,35 @@
 package com.dpozinen.rodin.core
 
 import com.dpozinen.rodin.domain.Chat
-import kotlinx.coroutines.reactor.awaitSingle
-import org.springframework.data.redis.core.ReactiveRedisOperations
-import org.springframework.data.redis.core.hasKeyAndAwait
-import org.springframework.data.redis.core.setAndAwait
+import org.springframework.data.redis.core.RedisOperations
 import org.springframework.stereotype.Service
 
 @Service
 class ChatOps(
-    private val chatTemplate: ReactiveRedisOperations<String, Chat>
+    private val chatTemplate: RedisOperations<String, Chat>
 ) {
 
-    suspend fun chat(chatId: String): Chat = chatTemplate.opsForValue().get(chatId).awaitSingle()
+    fun chat(chatId: String): Chat = chatTemplate.opsForValue().get(chatId)!!
 
-    suspend fun maybeCreate(chatId: String): Chat {
-        return if (chatTemplate.hasKeyAndAwait(chatId)) {
-            chatTemplate.opsForValue().get(chatId).awaitSingle()
+    fun maybeCreate(chatId: String): Chat {
+        return if (chatTemplate.hasKey(chatId) == true) {
+            chatTemplate.opsForValue().get(chatId)!!
         } else {
-            chatTemplate.opsForValue().set(chatId, Chat(chatId)).awaitSingle()
-            chatTemplate.opsForValue().get(chatId).awaitSingle()
+            chatTemplate.opsForValue().set(chatId, Chat(chatId))
+            chatTemplate.opsForValue().get(chatId)!!
         }
     }
 
-    suspend fun set(chatId: String, set: (Chat) -> Unit) {
+    fun set(chatId: String, set: (Chat) -> Unit) {
         chat(chatId)
             .let { chat ->
-                chatTemplate.opsForValue().setAndAwait(chatId,
+                chatTemplate.opsForValue().set(chatId,
                     chat.also { set(it) }
                 )
             }
     }
 
-    suspend fun set(chat: Chat) {
-        chatTemplate.opsForValue().setAndAwait(chat.id, chat)
+    fun set(chat: Chat) {
+        chatTemplate.opsForValue().set(chat.id, chat)
     }
 }

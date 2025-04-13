@@ -33,17 +33,7 @@ dependencies {
 
 	implementation 'org.springframework.data:spring-data-redis:3.4.0'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis:3.4.0'
-	implementation 'io.lettuce:lettuce-core:6.5.1.RELEASE'
-
-	configurations.configureEach {
-		resolutionStrategy {
-			eachDependency { dependency ->
-				if (dependency.requested.group == 'io.netty') {
-					dependency.useVersion '4.1.114.Final' // Replace with the desired version
-				}
-			}
-		}
-	}
+	implementation 'redis.clients:jedis:5.2.0'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'io.projectreactor:reactor-test'
