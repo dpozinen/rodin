@@ -1,10 +1,11 @@
 spring:
   application.name: rodin
-#  data:
-#    redis:
+  data:
+    redis:
 #      host: ${embedded.redis.host}
 #      port: ${embedded.redis.port}
 #      password: ${embedded.redis.password}
+      client-type: jedis
 
 rodin:
   telegram:
