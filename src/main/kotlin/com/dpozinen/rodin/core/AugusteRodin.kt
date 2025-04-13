@@ -5,14 +5,13 @@ import com.dpozinen.rodin.domain.ChatCommand
 import com.dpozinen.rodin.domain.ChatCommand.*
 import com.dpozinen.rodin.domain.ChatLanguage
 import com.dpozinen.rodin.domain.Offset
+import com.dpozinen.rodin.repo.OffsetRepo
 import com.dpozinen.rodin.rest.GetUpdatesResponse
 import com.dpozinen.rodin.rest.Telegram
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import jakarta.annotation.PostConstruct
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
-import org.springframework.data.redis.core.RedisOperations
-import org.springframework.data.redis.core.ScanOptions
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 
@@ -20,8 +19,7 @@ import org.springframework.stereotype.Service
 @Service
 class AugusteRodin(
     private val chatOps: ChatOps,
-    private val chatTemplate: RedisOperations<String, Chat>,
-    private val offsetTemplate: RedisOperations<String, Offset>,
+    private val offsets: OffsetRepo,
     private val telegram: Telegram,
 ) {
     private val log = LoggerFactory.getLogger(this::class.java)
@@ -35,29 +33,23 @@ class AugusteRodin(
 
     @PostConstruct
     fun initOffset() {
-        runBlocking {
-            offsetTemplate.opsForValue().get(Offset.ID)
-                ?: offsetTemplate.opsForValue().set(Offset.ID, Offset())
+        if (offsets.findAll().isEmpty()) {
+            offsets.save(Offset())
         }
     }
 
     @Scheduled(cron = "\${rodin.send-messages.cron}")
     fun sendMessages() {
         log.info("Sending messages")
-        chatTemplate.scan(ScanOptions.NONE).forEachRemaining {
-            runBlocking {
-                sendNext(chatOps.chat(it))
-            }
-        }
+        chatOps.forEach { runBlocking { sendNext(it) } }
     }
 
-    private suspend fun sendNext(chat: Chat) {
+    private fun sendNext(chat: Chat) {
         var addRepeatedMessaged = false
-        val cursor = chat.cursors[chat.currentLanguage]!!
+        val cursor = chat.currentCursor()
 
         if (cursor.cursor >= words[chat.currentLanguage]!!.count - cursor.wordCount - 1) {
-            chatTemplate.opsForValue()
-                .set(chat.id, chat.also { it.cursors[it.currentLanguage]!!.cursor = 0 })
+            cursor.cursor = 0
 
             addRepeatedMessaged = true
         }
@@ -65,39 +57,38 @@ class AugusteRodin(
         val newCursor = cursor.cursor + cursor.wordCount
         val batch = words[chat.currentLanguage]!!.words.subList(cursor.cursor, newCursor)
 
-        if (addRepeatedMessaged) telegram.sendMessage(chat.id, "⚠\uFE0F Word cycle complete")
+        val chatId = chat.id!!
+        if (addRepeatedMessaged) telegram.sendMessage(chatId, "⚠\uFE0F Word cycle complete")
 
-        batch.forEach { word -> telegram.sendMessage(chat.id, word.asMessage(), markdown = true) }
+        batch.forEach { word -> telegram.sendMessage(chatId, word.asMessage(), markdown = true) }
 
-        chatTemplate.opsForValue()
-            .set(chat.id, chat.also { it.cursors[it.currentLanguage]!!.cursor = newCursor })
+        chatOps.set(chatId) { cursor.cursor = newCursor }
 
-        telegram.sendMessage(chat.id, "||cursor at ${newCursor}||\n", markdown = true)
+        telegram.sendMessage(chatId, "||cursor at ${newCursor}||\n", markdown = true)
     }
 
     @Scheduled(cron = "\${rodin.get-updates.cron}")
     fun getUpdates() {
         runBlocking {
-            offsetTemplate.opsForValue().get(Offset.ID)
-                ?.offset
-                .let { offset ->
-                    telegram.getUpdates(offset)
+            offsets.findById(Offset.ID).ifPresent { offset ->
+                runBlocking {
+                    telegram.getUpdates(offset.chatOffset)
                         .result
                         .takeIf { it.isNotEmpty() }
                         ?.also {
-                            offsetTemplate.opsForValue()
-                                .set(Offset.ID, Offset(offset = it.last().updateId + 1))
+                            offset.chatOffset = it.last().updateId + 1
+                            offsets.save(offset)
                         }
                         ?.groupBy { it.message.chat.id.toString() }
                         ?.forEach { (chatId, updates) -> handleChatUpdates(updates, chatId) }
                 }
+            }
         }
     }
 
-    private suspend fun handleChatUpdates(updates: List<GetUpdatesResponse.Result>, chatId: String) {
+    private fun handleChatUpdates(updates: List<GetUpdatesResponse.Result>, chatId: String) {
         val chat = chatOps.maybeCreate(chatId)
         var command = chat.command
-        val cursor = chat.cursors[chat.currentLanguage]!!
 
         updates.forEach { update ->
             val text = update.message.text
@@ -109,7 +100,7 @@ class AugusteRodin(
                     MORE -> sendNext(chat)
                     OTHER -> telegram.sendMessage(chatId, "$text is not a command")
                     SET_CURSOR -> {
-                        telegram.sendMessage(chatId, "Now send the desired cursor. Current is ${cursor.cursor}")
+                        telegram.sendMessage(chatId, "Now send the desired cursor. Current is ${chat.currentCursor().cursor}")
                         chatOps.set(chat)
                     }
                     LANG -> {
@@ -123,7 +114,7 @@ class AugusteRodin(
                 when (command) {
                     SET_CURSOR -> {
                         trySetCursor(text, chatId)
-                        telegram.sendMessage(chatId, "Cursor is now at $text")
+                        telegram.sendMessage(chatId, "com.dpozinen.rodin.domain.Cursor is now at $text")
                     }
                     LANG -> {
                         trySetLanguage(text, chatId)
@@ -136,18 +127,20 @@ class AugusteRodin(
         }
     }
 
-    private suspend fun trySetCursor(text: String, chatId: String) {
+    private fun trySetCursor(text: String, chatId: String) {
         runCatching {
-            text.trim().toInt().let { cursor -> chatOps.set(chatId) { it.cursors[it.currentLanguage]!!.cursor = cursor } }
+            text.trim().toInt().let { cursor -> chatOps.set(chatId) {
+                it.currentCursor().cursor = cursor
+            } }
         }.onFailure {
             telegram.sendMessage(chatId, "$text is not a valid cursor value, did not update cursor")
         }
     }
 
-    private suspend fun trySetLanguage(text: String, chatId: String) {
+    private fun trySetLanguage(text: String, chatId: String) {
         runCatching {
             ChatLanguage.valueOf(text.trim().uppercase())
-                .let { cursor -> chatOps.set(chatId) { it.currentLanguage = cursor } }
+                .let { language -> chatOps.set(chatId) { it.currentLanguage = language } }
         }.onFailure {
             telegram.sendMessage(chatId, "$text is not a valid language value. Possible values: ${ChatLanguage.entries.toTypedArray()}")
         }

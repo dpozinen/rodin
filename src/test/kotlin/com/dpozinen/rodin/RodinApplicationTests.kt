@@ -11,9 +11,9 @@ import org.springframework.web.reactive.function.client.awaitBody
     webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT,
     classes = [RodinApplication::class],
     properties = [
-        "spring.data.redis.host=\${embedded.redis.host}",
-        "spring.data.redis.port=\${embedded.redis.port}",
-        "spring.data.redis.password=\${embedded.redis.password}"
+        "spring.datasource.url=jdbc:postgresql://\${embedded.postgresql.host}:\${embedded.postgresql.port}/\${embedded.postgresql.schema}",
+        "spring.datasource.username=\${embedded.postgresql.user}",
+        "spring.datasource.password=\${embedded.postgresql.password}"
     ]
 )
 class RodinApplicationTests {

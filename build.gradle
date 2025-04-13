@@ -31,26 +31,15 @@ dependencies {
 	implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-reactor'
 	implementation 'org.jetbrains.kotlin:kotlin-reflect'
 
-	implementation 'org.springframework.data:spring-data-redis:3.4.0'
-	implementation 'org.springframework.boot:spring-boot-starter-data-redis:3.4.0'
-	implementation 'redis.clients:jedis:5.2.0'
-
-	configurations.configureEach {
-		resolutionStrategy {
-			eachDependency { dependency ->
-				if (dependency.requested.group == 'io.netty') {
-					dependency.useVersion '4.2.0.Final'
-				}
-			}
-		}
-	}
+	implementation 'org.springframework.data:spring-data-jpa:3.3.9'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa:3.3.9'
+	runtimeOnly 'org.postgresql:postgresql'
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testImplementation 'io.projectreactor:reactor-test'
 	testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
-	testImplementation 'com.playtika.testcontainers:embedded-redis:3.1.5'
+	testImplementation 'com.playtika.testcontainers:embedded-postgresql:3.1.6'
 	testImplementation 'org.springframework.cloud:spring-cloud-starter-bootstrap:4.1.5'
 }
 

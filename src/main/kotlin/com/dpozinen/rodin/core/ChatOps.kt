@@ -1,35 +1,32 @@
 package com.dpozinen.rodin.core
 
 import com.dpozinen.rodin.domain.Chat
-import org.springframework.data.redis.core.RedisOperations
+import com.dpozinen.rodin.repo.ChatRepo
 import org.springframework.stereotype.Service
+import kotlin.jvm.optionals.getOrNull
 
 @Service
 class ChatOps(
-    private val chatTemplate: RedisOperations<String, Chat>
+    private val chats: ChatRepo
 ) {
 
-    fun chat(chatId: String): Chat = chatTemplate.opsForValue().get(chatId)!!
+    fun chat(chatId: String): Chat = chats.findById(chatId).getOrNull()!!
 
     fun maybeCreate(chatId: String): Chat {
-        return if (chatTemplate.hasKey(chatId) == true) {
-            chatTemplate.opsForValue().get(chatId)!!
-        } else {
-            chatTemplate.opsForValue().set(chatId, Chat(chatId))
-            chatTemplate.opsForValue().get(chatId)!!
-        }
+        return chats.findById(chatId).orElseGet { set(Chat(chatId))  }
     }
 
     fun set(chatId: String, set: (Chat) -> Unit) {
         chat(chatId)
             .let { chat ->
-                chatTemplate.opsForValue().set(chatId,
-                    chat.also { set(it) }
-                )
+                chat.also { set(it) }
+                chats.save(chat)
             }
     }
 
-    fun set(chat: Chat) {
-        chatTemplate.opsForValue().set(chat.id, chat)
+    fun set(chat: Chat) = chats.save(chat)
+
+    fun forEach(action: (Chat) -> Unit) {
+        chats.findAll().forEach { action(it) }
     }
 }
