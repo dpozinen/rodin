@@ -137,7 +137,7 @@ class AugusteRodin(
                 .let { language -> chatOps.set(chatId) { it.currentLanguage = language } }
             telegram.sendMessage(chatId, "Language is now $text")
         }.onFailure {
-            telegram.sendMessage(chatId, "$text is not a valid language value. Possible values: ${enumValues<ChatLanguage>()}")
+            telegram.sendMessage(chatId, "$text is not a valid language value. Possible values: ${enumValues<ChatLanguage>().map { it.name }}")
         }
     }
 
