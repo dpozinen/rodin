@@ -13,15 +13,11 @@ class ChatOps(
     fun chat(chatId: String): Chat = chats.findById(chatId).getOrNull()!!
 
     fun maybeCreate(chatId: String): Chat {
-        return chats.findById(chatId).orElseGet { set(Chat(chatId))  }
+        return chats.findById(chatId).orElseGet { set(Chat(chatId)) }
     }
 
-    fun set(chatId: String, set: (Chat) -> Unit) {
-        chat(chatId)
-            .let { chat ->
-                chat.also { set(it) }
-                chats.save(chat)
-            }
+    fun set(chatId: String, modify: (Chat) -> Unit) {
+        chat(chatId).also { chat -> modify(chat); set(chat) }
     }
 
     fun set(chat: Chat) = chats.save(chat)

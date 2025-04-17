@@ -62,7 +62,7 @@ class AugusteRodin(
 
         batch.forEach { word -> telegram.sendMessage(chatId, word.asMessage(), markdown = true) }
 
-        chatOps.set(chatId) { cursor.cursor = newCursor }
+        chatOps.set(chatId) { it.currentCursor().cursor = newCursor }
 
         telegram.sendMessage(chatId, "||cursor at ${newCursor}||\n", markdown = true)
     }
